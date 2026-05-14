@@ -442,6 +442,24 @@ class FastAPI(Starlette):
                 """
             ),
         ] = "/redoc",
+        health_url: Annotated[
+            str | None,
+            Doc(
+                """
+                The URL where the health check will be served from.
+
+                If you set it to `None`, the health check endpoint will be disabled.
+
+                **Example**
+
+                ```python
+                from fastapi import FastAPI
+
+                app = FastAPI(health_url="/health")
+                ```
+                """
+            ),
+        ] = "/health",
         swagger_ui_oauth2_redirect_url: Annotated[
             str | None,
             Doc(
@@ -882,6 +900,7 @@ class FastAPI(Starlette):
         self.root_path_in_servers = root_path_in_servers
         self.docs_url = docs_url
         self.redoc_url = redoc_url
+        self.health_url = health_url
         self.swagger_ui_oauth2_redirect_url = swagger_ui_oauth2_redirect_url
         self.swagger_ui_init_oauth = swagger_ui_init_oauth
         self.swagger_ui_parameters = swagger_ui_parameters
@@ -924,7 +943,7 @@ class FastAPI(Starlette):
         if self.openapi_url:
             assert self.title, "A title must be provided for OpenAPI, e.g.: 'My API'"
             assert self.version, "A version must be provided for OpenAPI, e.g.: '2.1.0'"
-        # TODO: remove when discarding the openapi_prefix parameter
+
         if openapi_prefix:
             logger.warning(
                 '"openapi_prefix" has been deprecated in favor of "root_path", which '
@@ -1099,6 +1118,8 @@ class FastAPI(Starlette):
         return self.openapi_schema
 
     def setup(self) -> None:
+        # Convention: route URLs are class attributes set in __init__, not hardcoded — override them at instantiation (e.g. FastAPI(docs_url="/swagger")).
+        # Convention: each block is guarded by a truthiness check — pass None (e.g. FastAPI(docs_url=None)) to disable that endpoint entirely.
         if self.openapi_url:
 
             async def openapi(req: Request) -> JSONResponse:
@@ -1113,6 +1134,9 @@ class FastAPI(Starlette):
                         )
                 return JSONResponse(schema)
 
+            # Convention: add_route (not add_api_route) bypasses FastAPI's request validation and response serialization — used here because these routes return pre-built responses with no body to parse.
+            # Convention: include_in_schema=False hides this route from the generated OpenAPI spec so it won't appear in /docs or /redoc.
+            # Serves the raw OpenAPI JSON schema at /openapi.json.
             self.add_route(self.openapi_url, openapi, include_in_schema=False)
         if self.openapi_url and self.docs_url:
 
@@ -1130,6 +1154,7 @@ class FastAPI(Starlette):
                     swagger_ui_parameters=self.swagger_ui_parameters,
                 )
 
+            # Serves the interactive Swagger UI at /docs.
             self.add_route(self.docs_url, swagger_ui_html, include_in_schema=False)
 
             if self.swagger_ui_oauth2_redirect_url:
@@ -1137,6 +1162,7 @@ class FastAPI(Starlette):
                 async def swagger_ui_redirect(req: Request) -> HTMLResponse:
                     return get_swagger_ui_oauth2_redirect_html()
 
+                # Handles the OAuth2 browser redirect callback for Swagger UI authentication.
                 self.add_route(
                     self.swagger_ui_oauth2_redirect_url,
                     swagger_ui_redirect,
@@ -1151,7 +1177,15 @@ class FastAPI(Starlette):
                     openapi_url=openapi_url, title=f"{self.title} - ReDoc"
                 )
 
+            # Serves the ReDoc UI at /redoc as an alternative API documentation viewer.
             self.add_route(self.redoc_url, redoc_html, include_in_schema=False)
+        if self.health_url:
+
+            async def health(req: Request) -> JSONResponse:
+                return JSONResponse({"status": "ok"})
+
+            # Serves a liveness check at /health returning {"status": "ok"}.
+            self.add_route(self.health_url, health, include_in_schema=False)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if self.root_path:

@@ -1,17 +1,30 @@
-There is no built-in way to check programmatically whether a named route exists in a FastAPI application without iterating over all routes manually. Add a method to the FastAPI application class that returns whether a route with a given name or path is registered.
+FastAPI allows hiding individual routes from the OpenAPI schema using include_in_schema on route 
+decorators, but there is no way to hide all routes under an entire router at once. Add support for 
+controlling OpenAPI schema inclusion at the router level so that all routes registered under a router 
+can be excluded without modifying each route individually.
 
-Learnings:
-- Code must live inside the FastAPI class in fastapi/applications.py as a new method.
-- The iteration pattern to reference is inside fastapi/routing.py inside include_router(), which loops over router.routes (a list of BaseRoute objects) and reads each route's name attribute.
-- Incoming requests go through FastAPI.__call__ (applications.py:1194) but everything is actually handled by Starlette — __call__ is not the right place.
-- The new method takes a name (str) as input, scans self.router.routes, and returns True/False depending on whether a route with that name exists.
-- Insert the method at applications.py:1198, between __call__ and add_api_route.
-- self.router is the APIRouter object (created at applications.py:1003). The actual list of all registered routes is self.router.routes — that is the list to scan in the new method.
 
-Method to implement:
+logic for hiding individual routes OpenAPI schema exists - uses 2 flags - route's and router's - include_in_schema - route 
+decorators
 
-def route_exists(self, name: str) -> bool:
-    for route in self.router.routes:
-        if route.name == name:
-            return True
-    return False
+main task - cant hide all routes  under an entire router at once - add support for controlling openAPI 
+schema inclusion at router level 
+
+Findings:
+
+Entry point is applications.py. Hiding logic lives in routing.py and openapi/utils.py.
+include_in_schema is the flag controlling visibility in the OpenAPI schema. It does NOT affect actual request handling — hidden routes still work, they just don't appear in /docs.
+The flag is ANDed at route registration time: route flag AND router flag AND include_router() flag → baked into each APIRoute object.
+app.routes is a flat list of APIRoute objects. After include_router() runs, routes are copied as new objects — no link back to the source router is preserved.
+Options considered:
+
+Match routes by endpoint function reference (same function object survives the copy)
+Use path prefix to identify routes belonging to a router
+Stamp each copied route with its source router during include_router()
+Solution:
+
+Add a router_source attribute to APIRoute objects, stamped during include_router() at routing.py:1764
+Add a new method that takes a router, filters app.routes by router_source, and sets include_in_schema on matched routes
+Only one risky location: include_router() reconstruction at line 1764 — must pass router_source through add_api_route() or it gets silently dropped
+WebSocket routes don't have include_in_schema — skip them
+All OpenAPI generation code in openapi/utils.py is read-only — unaffected

@@ -840,6 +840,7 @@ class APIRoute(routing.Route):
         generate_unique_id_function: Callable[["APIRoute"], str]
         | DefaultPlaceholder = Default(generate_unique_id),
         strict_content_type: bool | DefaultPlaceholder = Default(True),
+        router_name: str | None = None,
     ) -> None:
         self.path = path
         self.endpoint = endpoint
@@ -877,6 +878,7 @@ class APIRoute(routing.Route):
         self.response_model_exclude_defaults = response_model_exclude_defaults
         self.response_model_exclude_none = response_model_exclude_none
         self.include_in_schema = include_in_schema
+        self.router_name = router_name
         self.response_class = response_class
         self.dependency_overrides_provider = dependency_overrides_provider
         self.callbacks = callbacks
@@ -1366,6 +1368,7 @@ class APIRouter(routing.Router):
         generate_unique_id_function: Callable[[APIRoute], str]
         | DefaultPlaceholder = Default(generate_unique_id),
         strict_content_type: bool | DefaultPlaceholder = Default(True),
+        router_name: str | None = None,
     ) -> None:
         route_class = route_class_override or self.route_class
         responses = responses or {}
@@ -1415,6 +1418,7 @@ class APIRouter(routing.Router):
             strict_content_type=get_value_or_default(
                 strict_content_type, self.strict_content_type
             ),
+            router_name=router_name,
         )
         self.routes.append(route)
 
@@ -1795,6 +1799,7 @@ class APIRouter(routing.Router):
                         router.strict_content_type,
                         self.strict_content_type,
                     ),
+                    router_name=router.name,
                 )
             elif isinstance(route, routing.Route):
                 methods = list(route.methods or [])
@@ -1829,6 +1834,17 @@ class APIRouter(routing.Router):
             self.lifespan_context,
             router.lifespan_context,
         )
+
+    def set_router_include_in_schema(
+        self,
+        router_name: str,
+        include_in_schema: bool,
+    ) -> None:
+        for route in self.routes:
+            if isinstance(route, APIRoute) and route.router_name == router_name:
+                route.include_in_schema = include_in_schema
+        if hasattr(self, "openapi_schema"):
+            self.openapi_schema = None
 
     def get(
         self,

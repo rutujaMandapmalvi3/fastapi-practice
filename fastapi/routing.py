@@ -1286,7 +1286,8 @@ class APIRouter(routing.Router):
             lifespan=lifespan_context,
         )
         if prefix:
-            assert prefix.startswith("/"), "A path prefix must start with '/'"
+            if not prefix.startswith("/"):
+                raise ValueError("A path prefix must start with '/'")
             if prefix.endswith("/"):
                 raise ValueError(
                     "A path prefix must not end with '/', as the routes will start with '/'"

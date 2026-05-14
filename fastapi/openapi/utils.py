@@ -68,6 +68,14 @@ validation_error_response_definition = {
     },
 }
 
+http_error_definition = {
+    "title": "HTTPError",
+    "type": "object",
+    "properties": {
+        "detail": {"title": "Detail", "type": "string"},
+    },
+}
+
 status_code_ranges: dict[str, str] = {
     "1XX": "Information",
     "2XX": "Success",
@@ -472,6 +480,21 @@ def get_openapi_path(
                             "HTTPValidationError": validation_error_response_definition,
                         }
                     )
+            http404 = "404"
+            if not any(
+                status in operation["responses"]
+                for status in [http404, "4XX", "default"]
+            ):
+                operation["responses"][http404] = {
+                    "description": "Not Found",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": REF_PREFIX + "HTTPError"}
+                        }
+                    },
+                }
+                if "HTTPError" not in definitions:
+                    definitions["HTTPError"] = http_error_definition
             if route.openapi_extra:
                 deep_dict_update(operation, route.openapi_extra)
             path[method.lower()] = operation

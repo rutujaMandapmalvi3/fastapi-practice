@@ -1,0 +1,1 @@
+APIRouter accepts a prefix parameter but does not validate its format — developers can pass prefixes without a leading slash or with a trailing slash and get unexpected routing behavior. Add validation that enforces correct prefix format at router construction time with a clear error message.

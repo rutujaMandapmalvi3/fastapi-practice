@@ -1287,9 +1287,10 @@ class APIRouter(routing.Router):
         )
         if prefix:
             assert prefix.startswith("/"), "A path prefix must start with '/'"
-            assert not prefix.endswith("/"), (
-                "A path prefix must not end with '/', as the routes will start with '/'"
-            )
+            if prefix.endswith("/"):
+                raise ValueError(
+                    "A path prefix must not end with '/', as the routes will start with '/'"
+                )
 
         # Handle on_startup/on_shutdown locally since Starlette removed support
         # Ref: https://github.com/Kludex/starlette/pull/3117

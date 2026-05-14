@@ -1196,6 +1196,12 @@ class FastAPI(Starlette):
             scope["root_path"] = self.root_path
         await super().__call__(scope, receive, send)
 
+    def route_exists(self, name: str) -> bool:
+        for route in self.router.routes:
+            if route.name == name:
+                return True
+        return False
+
     def add_api_route(
         self,
         path: str,

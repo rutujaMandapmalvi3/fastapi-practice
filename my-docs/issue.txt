@@ -1,21 +1,17 @@
-FastAPI supports overriding dependencies in tests via app.dependency_overrides, but overrides must be manually cleaned up after each test. Add a context manager that applies dependency overrides for the duration of a block and automatically restores the original state on exit.
+There is no built-in way to check programmatically whether a named route exists in a FastAPI application without iterating over all routes manually. Add a method to the FastAPI application class that returns whether a route with a given name or path is registered.
 
-Understanding so far:
-- A context manager is a Python construct that works in three phases:
-  1. Before entry: make a copy of the original dependencies (app.dependency_overrides)
-  2. On entry (__enter__): apply the new overrides one by one from the parameters passed in
-  3. On exit (__exit__): reset app.dependency_overrides back to the original copy
+Learnings:
+- Code must live inside the FastAPI class in fastapi/applications.py as a new method.
+- The iteration pattern to reference is inside fastapi/routing.py inside include_router(), which loops over router.routes (a list of BaseRoute objects) and reads each route's name attribute.
+- Incoming requests go through FastAPI.__call__ (applications.py:1194) but everything is actually handled by Starlette — __call__ is not the right place.
+- The new method takes a name (str) as input, scans self.router.routes, and returns True/False depending on whether a route with that name exists.
+- Insert the method at applications.py:1198, between __call__ and add_api_route.
+- self.router is the APIRouter object (created at applications.py:1003). The actual list of all registered routes is self.router.routes — that is the list to scan in the new method.
 
-Implementation structure (two blocks):
-  - Store originals before the try block
-  - try: apply the override(s)
-  - finally: restore originals (guarantees cleanup even if the test raises)
+Method to implement:
 
-Key files:
-- app.dependency_overrides declared in fastapi/applications.py:985
-- Override resolution happens in fastapi/dependencies/utils.py:628-643 (solve_dependencies)
-- Existing manual override pattern in tests/test_dependency_overrides.py:208-213
-
-Status: IMPLEMENTED
-- Added a method inside the FastAPI class (fastapi/applications.py) using a decorator-style context manager with yield and finally blocks.
-- The yield marks the entry point (overrides active during the block), and the finally block guarantees the original dependencies are restored on exit.
+def route_exists(self, name: str) -> bool:
+    for route in self.router.routes:
+        if route.name == name:
+            return True
+    return False

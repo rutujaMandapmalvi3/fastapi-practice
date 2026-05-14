@@ -1,0 +1,21 @@
+FastAPI supports overriding dependencies in tests via app.dependency_overrides, but overrides must be manually cleaned up after each test. Add a context manager that applies dependency overrides for the duration of a block and automatically restores the original state on exit.
+
+Understanding so far:
+- A context manager is a Python construct that works in three phases:
+  1. Before entry: make a copy of the original dependencies (app.dependency_overrides)
+  2. On entry (__enter__): apply the new overrides one by one from the parameters passed in
+  3. On exit (__exit__): reset app.dependency_overrides back to the original copy
+
+Implementation structure (two blocks):
+  - Store originals before the try block
+  - try: apply the override(s)
+  - finally: restore originals (guarantees cleanup even if the test raises)
+
+Key files:
+- app.dependency_overrides declared in fastapi/applications.py:985
+- Override resolution happens in fastapi/dependencies/utils.py:628-643 (solve_dependencies)
+- Existing manual override pattern in tests/test_dependency_overrides.py:208-213
+
+Status: IMPLEMENTED
+- Added a method inside the FastAPI class (fastapi/applications.py) using a decorator-style context manager with yield and finally blocks.
+- The yield marks the entry point (overrides active during the block), and the finally block guarantees the original dependencies are restored on exit.

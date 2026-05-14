@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from contextlib import contextmanager
 from enum import Enum
 from typing import Annotated, Any, TypeVar
 
@@ -1034,6 +1035,17 @@ class FastAPI(Starlette):
         )
         self.middleware_stack: ASGIApp | None = None
         self.setup()
+
+    @contextmanager
+    def override_dependencies(
+        self, overrides: dict[Callable[..., Any], Callable[..., Any]]
+    ):
+        original = self.dependency_overrides.copy()
+        self.dependency_overrides.update(overrides)
+        try:
+            yield
+        finally:
+            self.dependency_overrides = original
 
     def build_middleware_stack(self) -> ASGIApp:
         # Duplicate/override from Starlette to add AsyncExitStackMiddleware
